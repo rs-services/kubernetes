@@ -10,7 +10,7 @@ install_script() {
 
 install_task() {
   install_script "$1"
-  cp "$RS_ATTACH_DIR/$1.cron" /etc/cron.d
+  sudo cp "$RS_ATTACH_DIR/$1.cron" /etc/cron.d
 }
 
 rs_cluster_tag() {

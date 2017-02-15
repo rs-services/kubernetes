@@ -73,7 +73,7 @@ mapping "map_cloud" do {
     "cloud" => "EC2 us-east-1",
     "datacenter" => "us-east-1e",
     "account_id" => "816783988377",
-    "instance_type" => "m4.large" },
+    "instance_type" => "m3.large" },
   "VMware" => {
     "cloud" => "",
     "datacenter" => "",
