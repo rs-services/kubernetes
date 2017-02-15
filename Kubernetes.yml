@@ -21,8 +21,8 @@ RightScripts:
   - RL10_Linux_Enable_Docker_Support_Beta.sh
   - Kubernetes_Install.sh
 MultiCloudImages:
-- Name: Ubuntu_16.04_x64_KVM
-  Revision: 3
+- Name: Ubuntu_16.04_x64
+  Revision: 5
   Publisher: RightScale
 Alerts:
 - Name: rs instance terminated
