@@ -1,16 +1,16 @@
 #!/bin/bash
 
 install_script() {
-  sudo cp "$RS_ATTACH_DIR/$1.sh" /tmp
-  sudo su - rightscale -c "mkdir -p ~/scripts"
-  sudo su - rightscale -c "cp /tmp/$1.sh ~/scripts"
-  sudo su - rightscale -c "chmod +x ~/scripts/$1.sh"
-  sudo rm "/tmp/$1.sh"
+  cp "$RS_ATTACH_DIR/$1.sh" /tmp
+  mkdir -p ~/scripts
+  cp /tmp/$1.sh ~/scripts
+  chmod +x ~/scripts/$1.sh
+  rm /tmp/$1.sh
 }
 
 install_task() {
   install_script "$1"
-  sudo cp "$RS_ATTACH_DIR/$1.cron" /etc/cron.d
+  cp "$RS_ATTACH_DIR/$1.cron" /etc/cron.d
 }
 
 rs_cluster_tag() {
@@ -29,17 +29,17 @@ rs_cluster_tag() {
 
 rs_cluster_config() {
   echo "Setting cluster configuration..."
-  sudo su - rightscale -c "mkdir -p ~/config"
-  sudo su - rightscale -c "echo $RS_CLUSTER_NAME > ~/config/RS_CLUSTER_NAME"
+  mkdir -p ~/config
+  echo $RS_CLUSTER_NAME > ~/config/RS_CLUSTER_NAME
 
-  if [[ -f ~rightscale/config/RS_BOOT_COUNT ]]; then
-    boot_count=$(cat ~rightscale/config/RS_BOOT_COUNT)
+  if [[ -f ~/config/RS_BOOT_COUNT ]]; then
+    boot_count=$(cat ~/config/RS_BOOT_COUNT)
     boot_count=$((boot_count+1))
   else
     boot_count=1
   fi
 
-  sudo su - rightscale -c "echo $boot_count > ~/config/RS_BOOT_COUNT"
+  echo $boot_count > ~/config/RS_BOOT_COUNT
 }
 
 rs_cluster_scripts() {
@@ -48,8 +48,8 @@ rs_cluster_scripts() {
 }
 
 rs_cluster_ssh_key() {
-  if [[ ! -f ~rightscale/.ssh/id_rsa ]]; then
-    echo "Creating ssh key for rightscale user..."
-    sudo su - rightscale -c "ssh-keygen -t rsa -b 4096 -N '' -f ~/.ssh/id_rsa"
+  if [[ ! -f ~/.ssh/id_rsa ]]; then
+    echo "Creating ssh key for rightlink user..."
+    ssh-keygen -t rsa -b 4096 -N '' -f ~/.ssh/id_rsa
   fi
 }
