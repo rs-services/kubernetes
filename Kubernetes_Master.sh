@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # ---
-# RightScript Name: Kubernetes Bootstrap
+# RightScript Name: Kubernetes Master
 # Inputs:
 #   RS_CLUSTER_NAME:
 #     Category: Cluster
@@ -11,6 +11,13 @@ IFS=$'\n\t'
 #     Input Type: single
 #     Required: true
 #     Advanced: false
+#   RS_REFRESH_TOKEN:
+#     Category: Cluster
+#     Description: Refresh token used to call the RightScale API
+#     Input Type: single
+#     Required: true
+#     Advanced: true
+#     Default: cred:RS_REFRESH_TOKEN
 #   RS_CLUSTER_ROLE:
 #     Category: Cluster
 #     Input Type: single
@@ -28,6 +35,7 @@ IFS=$'\n\t'
 # Attachments:
 # - rs_cluster.sh
 # - rs_kubernetes.sh
+# - kube_flannel.yml
 # ...
 
 # shellcheck source=attachments/rs_cluster.sh
@@ -36,18 +44,4 @@ source "$RS_ATTACH_DIR"/rs_cluster.sh
 # shellcheck source=attachments/rs_kubernetes.sh
 source "$RS_ATTACH_DIR"/rs_kubernetes.sh
 
-# case $(cat ~rightscale/config/RS_BOOT_COUNT) in
-# 1)
-#   # first boot - prepare server for openshift
-#   rs_openshift_config
-#   rs_openshift_register
-#   rs_openshift_prerequisites
-#
-#   # reboot needed due to updated kernel
-#   sudo reboot
-#   ;;
-# 2)
-#   # second boot - time to join cluster
-#   rs_cluster_tag "rs_cluster:status=joining"
-#   ;;
-# esac
+rs_kube_install_master

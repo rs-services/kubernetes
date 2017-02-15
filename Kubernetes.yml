@@ -6,7 +6,6 @@ RightScripts:
   Boot:
   - RL10_Linux_Wait_For_EIP.sh
   - RS_Cluster_Init.sh
-  - Kubernetes_Bootstrap.sh
   - RL10_Linux_Setup_Hostname.sh
   - RL10_Linux_Enable_Managed_Login.sh
   - RL10_Linux_Setup_NTP.sh
@@ -19,7 +18,8 @@ RightScripts:
   - RL10_Linux_Setup_Automatic_Upgrade.sh
   - RL10_Linux_Upgrade.sh
   - RL10_Linux_Enable_Docker_Support_Beta.sh
-  - Kubernetes_Install.sh
+  - Kubernetes_Master.sh
+  - Kubernetes_Node.sh
 MultiCloudImages:
 - Name: Ubuntu_16.04_x64
   Revision: 5

@@ -68,6 +68,11 @@ This action will modify the minimum and maximum number of cluster nodes. Althoug
 
 ---"
 
+permission "read_credentials" do
+  actions   "rs_cm.index", "rs_cm.show", "rs_cm.index_sensitive", "rs_cm.show_sensitive"
+  resources "rs_cm.credentials"
+end
+
 mapping "map_cloud" do {
   "AWS" => {
     "cloud" => "EC2 us-east-1",
@@ -316,12 +321,19 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
 end
 
 define enable(@cluster_master) return @cluster_master do
-  # ensure servers have been operational for
-  # at least 90 seconds to discover each other
-  sleep(90)
+  
+  call sys_get_execution_id() retrieve $execution_id
 
   # run install script on master
-  call run_executable(first(@cluster_master.current_instances()), {rightscript: {name: "Kubernetes_Install"}})
+  call run_executable(first(@cluster_master.current_instances()), {rightscript: {name: "Kubernetes Master"}, inputs: {
+    'RS_CLUSTER_NAME': 'text:' + $execution_id
+  }})
+  
+  # run install script on nodes
+  call run_executable(@cluster_node.current_instances(), {rightscript: {name: "Kubernetes Node"}, inputs: {
+    'RS_CLUSTER_NAME': 'text:' + $execution_id,
+    'KUBE_CLUSTER_JOIN_CMD': cred('KUBE_' + $execution_id + '_CLUSTER_TOKEN')
+  }})
 end
 
 define terminate(@cluster_master, @cluster_node) return @cluster_master, @cluster_node do
