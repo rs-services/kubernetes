@@ -72,23 +72,23 @@ mapping "map_cloud" do {
   "AWS" => {
     "cloud" => "EC2 us-east-1",
     "datacenter" => "us-east-1e",
-    "account_id" => "829360695105",
+    "account_id" => "816783988377",
     "instance_type" => "m4.large" },
   "VMware" => {
-    "cloud" => "TelstraLab01",
-    "datacenter" => "tel-zone01",
+    "cloud" => "",
+    "datacenter" => "",
     "account_id" => null,
-    "instance_type" => "large (memory reserved)" } }
+    "instance_type" => "" } }
 end
 
-parameter "master_count" do
-  type "number"
-  label "Master Count"
-  category "Application"
-  description "Number of cluster masters."
-  allowed_values 1, 3, 5
-  default 1
-end
+# parameter "master_count" do
+#   type "number"
+#   label "Master Count"
+#   category "Application"
+#   description "Number of cluster masters."
+#   allowed_values 1, 3, 5
+#   default 1
+# end
 
 parameter "node_count_min" do
   type "number"
@@ -115,7 +115,7 @@ parameter "cloud" do
   label "Cloud"
   category "Application"
   description "Target cloud for this cluster."
-  allowed_values "AWS", "VMware"
+  allowed_values "AWS"#, "VMware"
   default "AWS"
 end
 
@@ -174,7 +174,7 @@ resource 'cluster_master', type: 'server_array' do
   cloud map($map_cloud, $cloud, "cloud")
   datacenter map($map_cloud, $cloud, "datacenter")
   instance_type map($map_cloud, $cloud, "instance_type")
-  server_template find('Kubernetes Master', revision: 0)
+  server_template find('Kubernetes', revision: 0)
   inputs do {
     'RS_CLUSTER_ROLE' => 'text:master'
   } end
@@ -182,8 +182,8 @@ resource 'cluster_master', type: 'server_array' do
   array_type 'alert'
   elasticity_params do {
     'bounds' => {
-      'min_count'            => $master_count,
-      'max_count'            => $master_count
+      'min_count'            => 1,
+      'max_count'            => 1
     },
     'pacing' => {
       'resize_calm_time'     => 30,
@@ -202,7 +202,7 @@ resource 'cluster_node', type: 'server_array' do
   cloud map($map_cloud, $cloud, "cloud")
   datacenter map($map_cloud, $cloud, "datacenter")
   instance_type map($map_cloud, $cloud, "instance_type")
-  server_template find('Kubernetes Node', revision: 0)
+  server_template find('Kubernetes', revision: 0)
   inputs do {
     'RS_CLUSTER_ROLE' => 'text:node'
   } end
