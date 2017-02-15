@@ -39,7 +39,6 @@ fi
 
 cp ~rightscale/.ssh/authorized_keys /tmp
 chown rightscale:rightscale /tmp/authorized_keys
-chcon system_u:object_r:ssh_home_t:s0 /tmp/authorized_keys
 
 for key_tag in "${KEY_TAGS[@]}"; do
   if ! grep "${key_tag:${#key_tag_prefix}}" /tmp/authorized_keys > /dev/null; then
@@ -62,7 +61,6 @@ fi
 
 cp ~rightscale/.ssh/known_hosts /tmp
 chown rightscale:rightscale /tmp/known_hosts
-chcon system_u:object_r:ssh_home_t:s0 /tmp/known_hosts
 
 for ip_tag in "${IP_TAGS[@]}"; do
   if ! grep "${ip_tag:${#ip_tag_prefix}}" /tmp/known_hosts > /dev/null; then
