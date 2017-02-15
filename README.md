@@ -1,1 +1,1 @@
-# openshift
+# kubernetes

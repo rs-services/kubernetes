@@ -1,0 +1,22 @@
+Name: Kubernetes
+Description: "Kubernetes"
+Inputs: {}
+RightScripts:
+  Boot:
+  - RL10_Linux_Wait_For_EIP
+  - RS_Cluster_Init
+  - Kubernetes_Bootstrap
+  - RL10_Linux_Setup_Hostname
+  - RL10_Linux_Enable_Monitoring
+  - RL10_Linux_Setup_Automatic_Upgrade
+  - RL10_Linux_Enable_Docker_Support_Beta
+  Decommission:
+  - RL10_Linux_Shutdown_Reason
+  Operational:
+  - RL10_Linux_Setup_Automatic_Upgrade
+  - RL10_Linux_Upgrade
+  - RL10_Linux_Enable_Docker_Support_Beta
+  - Kubernetes_Install
+MultiCloudImages:
+- Name: RHEL_7.2_x64
+Alerts: []
