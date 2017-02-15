@@ -9,7 +9,6 @@ RightScripts:
   - Kubernetes_Bootstrap.sh
   - RL10_Linux_Setup_Hostname.sh
   - RL10_Linux_Enable_Managed_Login.sh
-  - RL10_Linux_Wait_For_EIP.sh
   - RL10_Linux_Setup_NTP.sh
   - RL10_Linux_Enable_Monitoring.sh
   - RL10_Linux_Setup_Alerts.sh
