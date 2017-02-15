@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # gather cluster data
-cluster_name=$(cat ~rightscale/config/RS_CLUSTER_NAME)
+cluster_name=$(cat ~/config/RS_CLUSTER_NAME)
 key_tag_prefix="rs_cluster:ssh_key="
 ip_tag_prefix="rs_cluster:ip="
 
@@ -11,13 +11,13 @@ ip_tag_prefix="rs_cluster:ip="
   tags/by_tag resource_type=instances \
   tags[]="rs_cluster:name=$cluster_name" \
   include_tags_with_prefix="rs_cluster:" \
-  > ~rightscale/config/cluster_machines.json
+  > ~/config/cluster_machines.json
 
 # ensure .ssh directores exist
-if [[ ! -d ~rightscale/.ssh ]]; then
-  mkdir ~rightscale/.ssh
-  chown rightscale:rightscale ~rightscale/.ssh
-  chmod 755 ~rightscale/.ssh
+if [[ ! -d ~/.ssh ]]; then
+  mkdir ~/.ssh
+  chown rightlink: ~/.ssh
+  chmod 755 ~/.ssh
 fi
 
 if [[ ! -d /root/.ssh ]]; then
@@ -29,16 +29,16 @@ fi
 # process authorized_keys file
 declare -a "KEY_TAGS=($(/usr/local/bin/rsc \
   --xm 'string:contains("'$key_tag_prefix'")' json \
-  < ~rightscale/config/cluster_machines.json))"
+  < ~/config/cluster_machines.json))"
 
-if [[ ! -f ~rightscale/.ssh/authorized_keys ]]; then
-  touch ~rightscale/.ssh/authorized_keys
-  chown rightscale:rightscale ~rightscale/.ssh/authorized_keys
-  chmod 644 ~rightscale/.ssh/authorized_keys
+if [[ ! -f ~/.ssh/authorized_keys ]]; then
+  touch ~/.ssh/authorized_keys
+  chown rightlink: ~/.ssh/authorized_keys
+  chmod 644 ~/.ssh/authorized_keys
 fi
 
-cp ~rightscale/.ssh/authorized_keys /tmp
-chown rightscale:rightscale /tmp/authorized_keys
+cp ~/.ssh/authorized_keys /tmp
+chown rightlink: /tmp/authorized_keys
 
 for key_tag in "${KEY_TAGS[@]}"; do
   if ! grep "${key_tag:${#key_tag_prefix}}" /tmp/authorized_keys > /dev/null; then
@@ -46,21 +46,21 @@ for key_tag in "${KEY_TAGS[@]}"; do
   fi
 done
 
-mv /tmp/authorized_keys ~rightscale/.ssh/authorized_keys
+mv /tmp/authorized_keys ~/.ssh/authorized_keys
 
 # process known_hosts file
 declare -a "IP_TAGS=($(/usr/local/bin/rsc \
   --xm 'string:contains("'$ip_tag_prefix'")' json \
-  < ~rightscale/config/cluster_machines.json))"
+  < ~/config/cluster_machines.json))"
 
-if [[ ! -f ~rightscale/.ssh/known_hosts ]]; then
-  touch ~rightscale/.ssh/known_hosts
-  chown rightscale:rightscale ~rightscale/.ssh/known_hosts
-  chmod 644 ~rightscale/.ssh/known_hosts
+if [[ ! -f ~/.ssh/known_hosts ]]; then
+  touch ~/.ssh/known_hosts
+  chown rightlink: ~/.ssh/known_hosts
+  chmod 644 ~/.ssh/known_hosts
 fi
 
-cp ~rightscale/.ssh/known_hosts /tmp
-chown rightscale:rightscale /tmp/known_hosts
+cp ~/.ssh/known_hosts /tmp
+chown rightlink: /tmp/known_hosts
 
 for ip_tag in "${IP_TAGS[@]}"; do
   if ! grep "${ip_tag:${#ip_tag_prefix}}" /tmp/known_hosts > /dev/null; then
@@ -68,7 +68,7 @@ for ip_tag in "${IP_TAGS[@]}"; do
   fi
 done
 
-mv /tmp/known_hosts ~rightscale/.ssh/known_hosts
+mv /tmp/known_hosts ~/.ssh/known_hosts
 
 # root should share ssh identity (needed for ansible)
-cp -R ~rightscale/.ssh/* /root/.ssh/
+cp -R ~/.ssh/* /root/.ssh/
