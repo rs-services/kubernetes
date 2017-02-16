@@ -1,5 +1,5 @@
 name 'Kubernetes Cluster'
-rs_ca_ver 20131202
+rs_ca_ver 20161221
 short_description "![logo](https://dl.dropboxusercontent.com/u/2202802/nav_logo.png)
 
 Creates a Kubernetes cluster"
@@ -265,7 +265,8 @@ operation 'terminate' do
   definition 'terminate'
 end
 
-operation 'Add Admin IP' do
+operation 'op_add_admin_ip' do
+  label 'Add Admin IP'
   description 'Authorize an additional admin IP for full access to the cluster'
   definition 'add_admin_ip'
   output_mappings do {
@@ -273,7 +274,8 @@ operation 'Add Admin IP' do
   } end
 end
 
-operation 'Update Autoscaling Range' do
+operation 'op_update_autoscaling_range' do
+  label 'Update Autoscaling Range'
   description 'Modify the minimum and maximum number of cluster nodes'
   definition 'resize_cluster'
 end
@@ -320,7 +322,7 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
   end
 end
 
-define enable(@cluster_master) return @cluster_master do
+define enable(@cluster_master, @cluster_node) return @cluster_master, @cluster_node do
   
   call sys_get_execution_id() retrieve $execution_id
 
@@ -434,7 +436,7 @@ end
 # @return $tags [Array<String>] an array of tags assigned to @resource
 define get_tags_for_resource(@resource) return $tags do
   $tags = []
-  $tags_response = rs.tags.by_resource(resource_hrefs: [@resource.href])
+  $tags_response = rs_cm.tags.by_resource(resource_hrefs: [@resource.href])
   $inner_tags_ary = first(first($tags_response))["tags"]
   $tags = map $current_tag in $inner_tags_ary return $tag do
     $tag = $current_tag["name"]
@@ -509,7 +511,7 @@ end
 define instance_get_server_template(@instance) return @server_template do
   $type = to_s(@instance)
   if !($type =~ "instance")
-    raise "instance_get_server_template requires @instance to be of type rs.instances.  Got "+$type+" instead"
+    raise "instance_get_server_template requires @instance to be of type rs_cm.instances.  Got "+$type+" instead"
   end
   $stref = select(@instance.links, {"rel": "server_template"})
   if size($stref) == 0
@@ -547,7 +549,7 @@ end
 # @see http://reference.rightscale.com/api1.5/resources/ResourceInstances.html#multi_run_executable
 # @see http://reference.rightscale.com/api1.5/resources/ResourceTasks.html
 define run_executable(@target,$options) return @tasks do
-  @tasks = rs.tasks.empty()
+  @tasks = rs_cm.tasks.empty()
   $default_options = {
     ignore_lock: false,
     wait_for_completion: true,
@@ -556,11 +558,11 @@ define run_executable(@target,$options) return @tasks do
 
   $merged_options = $options + $default_options
 
-  @instances = rs.instances.empty()
+  @instances = rs_cm.instances.empty()
   $target_type = type(@target)
-  if $target_type == "rs.servers"
+  if $target_type == "rs_cm.servers"
     @instances = @target.current_instance()
-  elsif $target_type == "rs.instances"
+  elsif $target_type == "rs_cm.instances"
     @instances = @target
   else
     raise "run_executable() can not operate on a collection of type "+$target_type
@@ -582,7 +584,7 @@ define run_executable(@target,$options) return @tasks do
       if contains?(keys($merged_options["rightscript"]),["href"])
         $run_executable_params_hash["right_script_href"] = $merged_options["rightscript"]["href"]
       else
-        @scripts = rs.right_scripts.get(filter: ["name=="+$merged_options["rightscript"]["name"]])
+        @scripts = rs_cm.right_scripts.get(filter: ["name=="+$merged_options["rightscript"]["name"]])
         if empty?(@scripts)
           raise "run_executable() unable to find RightScript with the name "+$merged_options["rightscript"]["name"]
         end
@@ -597,7 +599,7 @@ define run_executable(@target,$options) return @tasks do
           else
             # TODO: This won't be necessary when RCL assigns the proper empty return
             # collection type.
-            @script_with_revision = rs.right_scripts.empty()
+            @script_with_revision = rs_cm.right_scripts.empty()
           end
         end
         if empty?(@script_to_run)
