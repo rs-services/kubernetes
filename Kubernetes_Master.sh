@@ -36,6 +36,7 @@ IFS=$'\n\t'
 # - rs_cluster.sh
 # - rs_kubernetes.sh
 # - kube_flannel.yml
+# - kube_dashboard.yml
 # ...
 
 # shellcheck source=attachments/rs_cluster.sh
