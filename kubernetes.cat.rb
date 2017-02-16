@@ -334,7 +334,7 @@ define enable(@cluster_master, @cluster_node) return @cluster_master, @cluster_n
   # run install script on nodes
   call run_executable(@cluster_node.current_instances(), {rightscript: {name: "Kubernetes Node"}, inputs: {
     'RS_CLUSTER_NAME': 'text:' + $execution_id,
-    'KUBE_CLUSTER_JOIN_CMD': cred('KUBE_' + $execution_id + '_CLUSTER_TOKEN')
+    'KUBE_CLUSTER_JOIN_CMD': 'text:' + cred('KUBE_' + $execution_id + '_CLUSTER_TOKEN')
   }})
 end
 
