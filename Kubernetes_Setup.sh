@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # ---
-# RightScript Name: Kubernetes Node
+# RightScript Name: Kubernetes Setup
 # Inputs:
 #   RS_CLUSTER_NAME:
 #     Category: Cluster
