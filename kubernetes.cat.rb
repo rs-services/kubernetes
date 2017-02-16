@@ -255,11 +255,6 @@ operation 'launch' do
   } end
 end
 
-operation 'enable' do
-  description 'Enable the application'
-  definition 'enable'
-end
-
 operation 'terminate' do
   description 'Terminate the application'
   definition 'terminate'
