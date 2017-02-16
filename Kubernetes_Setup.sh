@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # ---
-# RightScript Name: Kubernetes Master
+# RightScript Name: Kubernetes Node
 # Inputs:
 #   RS_CLUSTER_NAME:
 #     Category: Cluster
@@ -26,6 +26,12 @@ IFS=$'\n\t'
 #     Possible Values:
 #     - text:master
 #     - text:node
+#   KUBE_CLUSTER_JOIN_CMD:
+#     Category: Cluster
+#     Description: Command for a node to join the cluster.
+#     Input Type: single
+#     Required: false
+#     Advanced: false
 #   MY_IP:
 #     Category: RightScale
 #     Input Type: single
@@ -45,4 +51,4 @@ source "$RS_ATTACH_DIR"/rs_cluster.sh
 # shellcheck source=attachments/rs_kubernetes.sh
 source "$RS_ATTACH_DIR"/rs_kubernetes.sh
 
-rs_kube_install_master
+eval "rs_kube_install_$RS_CLUSTER_ROLE"

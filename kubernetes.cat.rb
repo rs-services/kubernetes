@@ -308,10 +308,13 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
     call update_field(@cluster_node, "cloud_specific_attributes", {"root_volume_size" => 100, "root_volume_type_uid" => "gp2"}) retrieve @cluster_node
   end
 
-  concurrent return @cluster_master, @cluster_node do
-    provision(@cluster_master)
-    provision(@cluster_node)
-  end
+  provision(@cluster_master)
+  
+  @@deployment.multi_update_inputs(inputs: {
+    'KUBE_CLUSTER_JOIN_CMD':'cred:' + 'KUBE_' + $execution_id + '_CLUSTER_TOKEN'
+  })
+  
+  provision(@cluster_node)
 
   $new_admin_ips = $admin_ip
 
@@ -320,22 +323,6 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
   else
     $master_ip = @cluster_master.current_instances().private_ip_addresses[0]
   end
-end
-
-define enable(@cluster_master, @cluster_node) return @cluster_master, @cluster_node do
-  
-  call sys_get_execution_id() retrieve $execution_id
-
-  # run install script on master
-  call run_executable(first(@cluster_master.current_instances()), {rightscript: {name: "Kubernetes Master"}, inputs: {
-    'RS_CLUSTER_NAME': 'text:' + $execution_id
-  }})
-  
-  # run install script on nodes
-  call run_executable(@cluster_node.current_instances(), {rightscript: {name: "Kubernetes Node"}, inputs: {
-    'RS_CLUSTER_NAME': 'text:' + $execution_id,
-    'KUBE_CLUSTER_JOIN_CMD': 'text:' + cred('KUBE_' + $execution_id + '_CLUSTER_TOKEN')
-  }})
 end
 
 define terminate(@cluster_master, @cluster_node) return @cluster_master, @cluster_node do
