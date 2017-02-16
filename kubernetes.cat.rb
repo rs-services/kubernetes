@@ -359,7 +359,7 @@ end
 
 define add_admin_ip(@cluster_sg, $admin_ip) return $new_admin_ips do
   @new_rule = {
-    "namespace": "rs",
+    "namespace": "rs_cm",
     "type": "security_group_rule",
     "fields": {
       "protocol": "tcp",
