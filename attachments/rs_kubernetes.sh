@@ -23,6 +23,11 @@ EOF
 
   # Initialize the overlay network
   sudo kubectl apply -f "$RS_ATTACH_DIR/kube_flannel.yml"
+  sudo kubectl apply -f "$RS_ATTACH_DIR/kube_dashboard.yml"
+
+  dashboard_port=$(sudo kubectl get svc -n kube-system | grep '^kubernetes-dashboard ' | awk '{print $4}' | cut -f1 -d/ | cut -f2 -d:)
+
+  rs_cluster_tag "rs_cluster:dashboard_port=$dashboard_port"
 }
 
 rs_kube_install_node() {
