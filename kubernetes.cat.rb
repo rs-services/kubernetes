@@ -251,7 +251,7 @@ operation 'launch' do
   output_mappings do {
     $ssh_url => join(["ssh://rightscale@", $master_ip]),
     $admin_ips => $new_admin_ips,
-    $dashboard_url => join(["https://", $master_ip, ".nip.io:8443/console"])
+    $dashboard_url => join(["http://", $master_ip, ":", $dashboard_port])
   } end
 end
 
@@ -280,7 +280,7 @@ operation 'op_update_autoscaling_range' do
   definition 'resize_cluster'
 end
 
-define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $admin_ip, $cloud) return @cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $master_ip, $new_admin_ips do
+define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $admin_ip, $cloud) return @cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $master_ip, $new_admin_ips, $dashboard_port do
 
   call sys_get_execution_id() retrieve $execution_id
 
@@ -317,6 +317,7 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
   provision(@cluster_node)
 
   $new_admin_ips = $admin_ip
+  $dashboard_port = tag_value(first(@cluster_master.current_instances()), "rs_cluster:dashboard_port")
 
   if $cloud == "AWS"
     $master_ip = @cluster_master.current_instances().public_ip_addresses[0]
