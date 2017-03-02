@@ -14,6 +14,7 @@ RightScripts:
   - RL10_Linux_Setup_Automatic_Upgrade.sh
   - Kubernetes_Setup.sh
   Decommission:
+  - RS_Cluster_Shutdown.sh
   - RL10_Linux_Shutdown_Reason.sh
   Operational:
   - RL10_Linux_Setup_Automatic_Upgrade.sh
