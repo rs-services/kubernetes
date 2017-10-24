@@ -15,9 +15,11 @@ EOF
 
   # Initialize the master and grab the join command to be used by the cluster nodes
   token=$(sudo kubeadm init --pod-network-cidr 10.244.0.0/16 | grep -i "kubeadm join")
+  
+  RS_API_ENDPOINT=$(echo $RS_SERVER | cut -d '\' -f3)
 
   # Save the token as a RightScale credential
-  rsc --refreshToken="$RS_REFRESH_TOKEN" --host=us-4.rightscale.com cm15 create credentials \
+  rsc --refreshToken="$RS_REFRESH_TOKEN" --host="$RS_API_ENDPOINT" cm15 create credentials \
     credential[name]="KUBE_${RS_CLUSTER_NAME}_CLUSTER_TOKEN" \
     credential[value]="$token"
 
