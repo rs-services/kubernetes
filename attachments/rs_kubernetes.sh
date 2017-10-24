@@ -13,8 +13,8 @@ EOF
   sudo apt-get install -y docker.io
   sudo apt-get install -y kubelet kubeadm kubectl kubernetes-cni
 
-  # Initialize the master
-  token=$(sudo kubeadm init --pod-network-cidr 10.244.0.0/16 | tail -n 1)
+  # Initialize the master and grab the join command to be used by the cluster nodes
+  token=$(sudo kubeadm init --pod-network-cidr 10.244.0.0/16 | grep -i "kubeadm join")
 
   # Save the token as a RightScale credential
   rsc --refreshToken="$RS_REFRESH_TOKEN" --host=us-4.rightscale.com cm15 create credentials \

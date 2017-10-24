@@ -20,9 +20,7 @@ RightScripts:
   - RL10_Linux_Upgrade.sh
   - RL10_Linux_Enable_Docker_Support_Beta.sh
 MultiCloudImages:
-- Name: Ubuntu_16.04_x64
-  Revision: 5
-  Publisher: RightScale
+- Name: PFT Ubuntu 16.04
 Alerts:
 - Name: rs instance terminated
   Description: Raise an alert if the instance has been terminated abnormally, i.e.

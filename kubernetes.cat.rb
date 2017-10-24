@@ -68,32 +68,36 @@ This action will modify the minimum and maximum number of cluster nodes. Althoug
 
 ---"
 
+import "pft/mci"
+import "pft/mci/linux_mappings", as: "linux_mappings"
+
 permission "read_credentials" do
   actions   "rs_cm.index", "rs_cm.show", "rs_cm.index_sensitive", "rs_cm.show_sensitive"
   resources "rs_cm.credentials"
+end
+
+mapping "map_image_name_root" do 
+ like $linux_mappings.map_image_name_root
 end
 
 mapping "map_cloud" do {
   "AWS" => {
     "cloud" => "EC2 us-east-1",
     "datacenter" => "us-east-1e",
-    "account_id" => "816783988377",
     "instance_type" => "m3.large" },
+  "Google" => {
+    "cloud" => "Google",
+    "datacenter" => "us-central1-b",
+    "instance_type" => "n1-standard-1" },
+  "AzureRM" => {   
+    "cloud" => "AzureRM East US",
+    "datacenter" => null,
+    "instance_type" => "D1" },
   "VMware" => {
     "cloud" => "",
     "datacenter" => "",
-    "account_id" => null,
     "instance_type" => "" } }
 end
-
-# parameter "master_count" do
-#   type "number"
-#   label "Master Count"
-#   category "Application"
-#   description "Number of cluster masters."
-#   allowed_values 1, 3, 5
-#   default 1
-# end
 
 parameter "node_count_min" do
   type "number"
@@ -120,8 +124,8 @@ parameter "cloud" do
   label "Cloud"
   category "Application"
   description "Target cloud for this cluster."
-  allowed_values "AWS"#, "VMware"
-  default "AWS"
+  allowed_values "AWS", "Google", "AzureRM"
+  default "Google"
 end
 
 parameter "admin_ip" do
@@ -133,17 +137,23 @@ parameter "admin_ip" do
   constraint_description "Please enter a single IP address. Additional IPs can be added after launch."
 end
 
+condition "needsSecurityGroup" do
+  logic_or(logic_or(equals?($param_location, "AWS"), equals?($param_location, "Google")), equals?($param_location, "AzureRM"))
+end
+
 resource 'cluster_sg', type: 'security_group' do
   name join(['cluster_sg_', last(split(@@deployment.href, '/'))])
   cloud map($map_cloud, $cloud, "cloud")
 end
 
+# Not production grade. Should be limited ports and sources.
+# But good enough for demo purposes.
 resource 'cluster_sg_rule_int_tcp', type: 'security_group_rule' do
   protocol 'tcp'
   direction 'ingress'
-  source_type 'group'
+  source_type "cidr_ips"
+  cidr_ips "0.0.0.0/0"
   security_group @cluster_sg
-  group_owner map($map_cloud, $cloud, "account_id")
   protocol_details do {
     'start_port' => '0',
     'end_port' => '65535'
@@ -153,9 +163,9 @@ end
 resource 'cluster_sg_rule_int_udp', type: 'security_group_rule' do
   protocol 'udp'
   direction 'ingress'
-  source_type 'group'
+  source_type "cidr_ips"
+  cidr_ips "0.0.0.0/0"
   security_group @cluster_sg
-  group_owner map($map_cloud, $cloud, "account_id")
   protocol_details do {
     'start_port' => '0',
     'end_port' => '65535'
@@ -178,6 +188,7 @@ resource 'cluster_master', type: 'server_array' do
   name 'cluster-master'
   cloud map($map_cloud, $cloud, "cloud")
   datacenter map($map_cloud, $cloud, "datacenter")
+  security_group_hrefs @cluster_sg
   instance_type map($map_cloud, $cloud, "instance_type")
   server_template find('Kubernetes', revision: 0)
   inputs do {
@@ -206,6 +217,7 @@ resource 'cluster_node', type: 'server_array' do
   name 'cluster-node'
   cloud map($map_cloud, $cloud, "cloud")
   datacenter map($map_cloud, $cloud, "datacenter")
+  security_group_hrefs @cluster_sg
   instance_type map($map_cloud, $cloud, "instance_type")
   server_template find('Kubernetes', revision: 0)
   inputs do {
@@ -275,8 +287,18 @@ operation 'op_update_autoscaling_range' do
   definition 'resize_cluster'
 end
 
-define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $admin_ip, $cloud) return @cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $master_ip, $new_admin_ips, $dashboard_port do
+define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $admin_ip, $cloud, $map_cloud, $map_image_name_root, $needsSecurityGroup) return @cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $master_ip, $new_admin_ips, $dashboard_port do
 
+  # Make sure the MCI is pointing to the latest image for the cloud.
+  # This adds about a minute to the launch but is worth it to avoid a failure due to the cloud provider
+  # deprecating the image we use.
+  $cloud_name = map( $map_cloud, $cloud, "cloud" )
+  $mci_name = "PFT Ubuntu 16.04"
+  call mci.find_mci($mci_name) retrieve @mci
+  @cloud = find("clouds", $cloud_name)
+  call mci.find_image_href(@cloud, $map_image_name_root, $mci_name, $cloud) retrieve $image_href
+  call mci.mci_upsert_cloud_image(@mci, @cloud.href, $image_href)
+  
   call sys_get_execution_id() retrieve $execution_id
 
   @@deployment.multi_update_inputs(inputs: {
@@ -285,20 +307,15 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
     'RS_CLUSTER_TYPE':'text:kubernetes'
   })
 
-  if $cloud == "AWS"
+  if $needsSecurityGroup
     provision(@cluster_sg)
-
-    call security_group_name($cloud, @cluster_sg) retrieve $security_group_name
-    call update_field(@cluster_sg_rule_int_tcp, "group_name", $security_group_name) retrieve @cluster_sg_rule_int_tcp
-    call update_field(@cluster_sg_rule_int_udp, "group_name", $security_group_name) retrieve @cluster_sg_rule_int_udp
 
     provision(@cluster_sg_rule_int_tcp)
     provision(@cluster_sg_rule_int_udp)
     provision(@cluster_sg_rule_admin)
-
-    call update_field(@cluster_master, "security_group_hrefs", [@cluster_sg]) retrieve @cluster_master
-    call update_field(@cluster_node, "security_group_hrefs", [@cluster_sg]) retrieve @cluster_node
-
+  end
+  
+  if $cloud == "AWS"
     call update_field(@cluster_master, "cloud_specific_attributes", {"root_volume_size" => 100, "root_volume_type_uid" => "gp2"}) retrieve @cluster_master
     call update_field(@cluster_node, "cloud_specific_attributes", {"root_volume_size" => 100, "root_volume_type_uid" => "gp2"}) retrieve @cluster_node
   end
@@ -314,10 +331,10 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
   $new_admin_ips = $admin_ip
   $dashboard_port = tag_value(first(@cluster_master.current_instances()), "rs_cluster:dashboard_port")
 
-  if $cloud == "AWS"
-    $master_ip = @cluster_master.current_instances().public_ip_addresses[0]
-  else
+  if $cloud == "VMware"
     $master_ip = @cluster_master.current_instances().private_ip_addresses[0]
+  else
+    $master_ip = @cluster_master.current_instances().public_ip_addresses[0]
   end
 end
 
