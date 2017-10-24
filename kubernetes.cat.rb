@@ -128,58 +128,42 @@ parameter "cloud" do
   default "Google"
 end
 
-parameter "admin_ip" do
-  type "string"
-  label "Admin IP"
-  category "Application"
-  description "Allowed source IP for cluster administration. This IP address will have full access to the cluster."
-  allowed_pattern "^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
-  constraint_description "Please enter a single IP address. Additional IPs can be added after launch."
-end
-
 condition "needsSecurityGroup" do
-  logic_or(logic_or(equals?($param_location, "AWS"), equals?($param_location, "Google")), equals?($param_location, "AzureRM"))
+  logic_or(logic_or(equals?($cloud, "AWS"), equals?($cloud, "Google")), equals?($cloud, "AzureRM"))
 end
 
 resource 'cluster_sg', type: 'security_group' do
-  name join(['cluster_sg_', last(split(@@deployment.href, '/'))])
+  name join(['ClusterSG-', last(split(@@deployment.href, '/'))])
+  description "Cluster security group."
   cloud map($map_cloud, $cloud, "cloud")
 end
 
 # Not production grade. Should be limited ports and sources.
 # But good enough for demo purposes.
 resource 'cluster_sg_rule_int_tcp', type: 'security_group_rule' do
+  name "ClusterSG TCP Rule"
+  description "TCP rule for Cluster SG"
+  source_type "cidr_ips"
+  security_group @cluster_sg
   protocol 'tcp'
   direction 'ingress'
-  source_type "cidr_ips"
   cidr_ips "0.0.0.0/0"
-  security_group @cluster_sg
   protocol_details do {
-    'start_port' => '0',
+    'start_port' => '1',
     'end_port' => '65535'
   } end
 end
 
 resource 'cluster_sg_rule_int_udp', type: 'security_group_rule' do
+  name "ClusterSG UDP Rule"
+  description "UDP rule for Cluster SG"
+  source_type "cidr_ips"
+  security_group @cluster_sg
   protocol 'udp'
   direction 'ingress'
-  source_type "cidr_ips"
   cidr_ips "0.0.0.0/0"
-  security_group @cluster_sg
   protocol_details do {
-    'start_port' => '0',
-    'end_port' => '65535'
-  } end
-end
-
-resource 'cluster_sg_rule_admin', type: 'security_group_rule' do
-  protocol 'tcp'
-  direction 'ingress'
-  source_type 'cidr_ips'
-  security_group @cluster_sg
-  cidr_ips join([$admin_ip, '/32'])
-  protocol_details do {
-    'start_port' => '0',
+    'start_port' => '1',
     'end_port' => '65535'
   } end
 end
@@ -252,17 +236,11 @@ output "dashboard_url" do
   category "Kubernetes"
 end
 
-output "admin_ips" do
-  label "Authorized admin IPs"
-  category "Kubernetes"
-end
-
 operation 'launch' do
   description 'Launch the application'
   definition 'launch'
   output_mappings do {
     $ssh_url => join(["ssh://rightscale@", $master_ip]),
-    $admin_ips => $new_admin_ips,
     $dashboard_url => join(["http://", $master_ip, ":", $dashboard_port])
   } end
 end
@@ -272,22 +250,13 @@ operation 'terminate' do
   definition 'terminate'
 end
 
-operation 'op_add_admin_ip' do
-  label 'Add Admin IP'
-  description 'Authorize an additional admin IP for full access to the cluster'
-  definition 'add_admin_ip'
-  output_mappings do {
-    $admin_ips => $new_admin_ips
-  } end
-end
-
 operation 'op_update_autoscaling_range' do
   label 'Update Autoscaling Range'
   description 'Modify the minimum and maximum number of cluster nodes'
   definition 'resize_cluster'
 end
 
-define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $admin_ip, $cloud, $map_cloud, $map_image_name_root, $needsSecurityGroup) return @cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $master_ip, $new_admin_ips, $dashboard_port do
+define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $cloud, $map_cloud, $map_image_name_root, $needsSecurityGroup) return @cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $master_ip, $dashboard_port do
 
   # Make sure the MCI is pointing to the latest image for the cloud.
   # This adds about a minute to the launch but is worth it to avoid a failure due to the cloud provider
@@ -308,11 +277,8 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
   })
 
   if $needsSecurityGroup
-    provision(@cluster_sg)
-
     provision(@cluster_sg_rule_int_tcp)
     provision(@cluster_sg_rule_int_udp)
-    provision(@cluster_sg_rule_admin)
   end
   
   if $cloud == "AWS"
@@ -328,7 +294,6 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
   
   provision(@cluster_node)
 
-  $new_admin_ips = $admin_ip
   $dashboard_port = tag_value(first(@cluster_master.current_instances()), "rs_cluster:dashboard_port")
 
   if $cloud == "VMware"
@@ -344,6 +309,13 @@ define terminate(@cluster_master, @cluster_node) return @cluster_master, @cluste
     delete(@cluster_master)
     delete(@cluster_node)
   end
+  
+  # Delete the credential that was created by the kubernetes set up rightscript.
+  call sys_get_execution_id() retrieve $execution_id
+  $cred_name = 'KUBE_' + $execution_id + '_CLUSTER_TOKEN'
+  @cred = find("credentials", $cred_name)
+  delete(@cred)
+  
 end
 
 define resize_cluster(@cluster_node, $node_count_min, $node_count_max) return @cluster_node, $node_count_min, $node_count_max do
@@ -355,38 +327,6 @@ define resize_cluster(@cluster_node, $node_count_min, $node_count_max) return @c
       }
     }
   })
-end
-
-define add_admin_ip(@cluster_sg, $admin_ip) return $new_admin_ips do
-  @new_rule = {
-    "namespace": "rs_cm",
-    "type": "security_group_rule",
-    "fields": {
-      "protocol": "tcp",
-      "direction": "ingress",
-      "source_type": "cidr_ips",
-      "security_group_href": @cluster_sg,
-      "cidr_ips": join([$admin_ip, '/32']),
-      "protocol_details": {
-        "start_port": "0",
-        "end_port": "65535"
-      }
-    }
-  }
-
-  provision(@new_rule)
-
-  $sg_cidr_ips = @cluster_sg.security_group_rules().cidr_ips[]
-
-  $sg_ips = map $sg_cidr_ip in $sg_cidr_ips return $sg_ip do
-    if $sg_cidr_ip
-      $sg_ip = first(split($sg_cidr_ip, "/"))
-    else
-      $sg_ip = null
-    end
-  end
-
-  $new_admin_ips = join($sg_ips, ", ")
 end
 
 define security_group_name($cloud, @group) return $name do
