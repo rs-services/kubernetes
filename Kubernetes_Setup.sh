@@ -50,6 +50,7 @@ IFS=$'\n\t'
 # - rs_kubernetes.sh
 # - kube_flannel.yml
 # - kube_dashboard.yml
+# - kube_dashboard_admin.yml
 # - kube_influxdb.yml
 # ...
 

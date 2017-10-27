@@ -32,15 +32,24 @@ EOF
   # Initialize the overlay network
   echo ">>> flannel set up"
   sudo kubectl apply -f "$RS_ATTACH_DIR/kube_flannel.yml"
-  
+    
   echo ">>> dashboard set up"
   sudo kubectl apply -f "$RS_ATTACH_DIR/kube_dashboard.yml"
   
   echo ">>> influxdb set up"
   sudo kubectl apply -f "$RS_ATTACH_DIR/kube_influxdb.yml"
+  
+  echo ">>> Exposing dashboard"
+  sudo kubectl -n kube-system expose deployment kubernetes-dashboard \
+        --name kubernetes-dashboard-nodeport --type=NodePort
+        
+  ### This is is NOT for PRODUCTION
+  ### This gives full access to the Kubernetes cluster.
+  echo ">>> Creating open access to dashboard with full ADMIN level permissions."
+  kubectl create -f "$RS_ATTACH_DIR/kube_dashboard_admin.yml"
 
   echo ">>> get dashboard port"
-  dashboard_port=$(sudo kubectl get svc -n kube-system | grep '^kubernetes-dashboard ' | awk '{print $4}' | cut -f1 -d/ | cut -f2 -d:)
+  dashboard_port=$(sudo kubectl -n kube-system get svc/kubernetes-dashboard-nodeport | grep 'kubernetes-dashboard' | sed 's/  */%/g' | cut -d "%" -f5 | cut -d":" -f2 | cut -d"/" -f1)
 
   rs_cluster_tag "rs_cluster:dashboard_port=$dashboard_port"
 }

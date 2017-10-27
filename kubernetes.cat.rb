@@ -84,14 +84,20 @@ mapping "map_cloud" do {
   "AWS" => {
     "cloud" => "EC2 us-east-1",
     "datacenter" => "us-east-1e",
+    "network" => null,
+    "subnet" => null,
     "instance_type" => "m3.large" },
   "Google" => {
     "cloud" => "Google",
     "datacenter" => "us-central1-b",
+    "network" => null,
+    "subnet" => null,
     "instance_type" => "n1-standard-1" },
   "AzureRM" => {   
     "cloud" => "AzureRM East US",
     "datacenter" => null,
+    "network" => "pft_arm_network",
+    "subnet" => "default",
     "instance_type" => "D1" },
   "VMware" => {
     "cloud" => "",
@@ -136,6 +142,7 @@ resource 'cluster_sg', type: 'security_group' do
   name join(['ClusterSG-', last(split(@@deployment.href, '/'))])
   description "Cluster security group."
   cloud map($map_cloud, $cloud, "cloud")
+  network find(map($map_cloud, $cloud, "network"))
 end
 
 # Not production grade. Should be limited ports and sources.
@@ -172,6 +179,8 @@ resource 'cluster_master', type: 'server_array' do
   name 'cluster-master'
   cloud map($map_cloud, $cloud, "cloud")
   datacenter map($map_cloud, $cloud, "datacenter")
+  network find(map($map_cloud, $cloud, "network"))
+  subnets find(map($map_cloud, $cloud, "subnet"))
   security_group_hrefs @cluster_sg
   instance_type map($map_cloud, $cloud, "instance_type")
   server_template find('Kubernetes', revision: 0)
@@ -201,6 +210,8 @@ resource 'cluster_node', type: 'server_array' do
   name 'cluster-node'
   cloud map($map_cloud, $cloud, "cloud")
   datacenter map($map_cloud, $cloud, "datacenter")
+  network find(map($map_cloud, $cloud, "network"))
+  subnets find(map($map_cloud, $cloud, "subnet"))
   security_group_hrefs @cluster_sg
   instance_type map($map_cloud, $cloud, "instance_type")
   server_template find('Kubernetes', revision: 0)
@@ -227,7 +238,7 @@ resource 'cluster_node', type: 'server_array' do
 end
 
 output "ssh_url" do
-  label "SSH to master server"
+  label "Master Node IP"
   category "Kubernetes"
 end
 
@@ -240,8 +251,8 @@ operation 'launch' do
   description 'Launch the application'
   definition 'launch'
   output_mappings do {
-    $ssh_url => join(["ssh://rightscale@", $master_ip]),
-    $dashboard_url => join(["http://", $master_ip, ":", $dashboard_port])
+    $ssh_url => $master_ip,
+    $dashboard_url => join(["https://", $master_ip, ":", $dashboard_port])
   } end
 end
 
