@@ -138,7 +138,6 @@ parameter "admin_ip" do
   description "Allowed source IP for cluster administration. This IP address will have access to the cluster dashboard."
   allowed_pattern "^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
   constraint_description "Please enter a single IP address. Additional IPs can be added after launch."
-  default "23.28.197.95"
 end
 
 condition "needsSecurityGroup" do
