@@ -1,6 +1,6 @@
 name 'Kubernetes Cluster'
 rs_ca_ver 20161221
-short_description "![logo](https://dl.dropboxusercontent.com/u/2202802/nav_logo.png)
+short_description "![logo](https://s3.amazonaws.com/rs-pft/cat-logos/kubernetes.png)
 
 Creates a Kubernetes cluster"
 
