@@ -18,6 +18,13 @@ IFS=$'\n\t'
 #     Required: true
 #     Advanced: true
 #     Default: cred:RS_REFRESH_TOKEN
+#   RS_SERVER:
+#     Category: Cluster
+#     Description: RS API Endpoint
+#     Input Type: single
+#     Required: true
+#     Advanced: true
+#     Default: env:RS_SERVER
 #   RS_CLUSTER_ROLE:
 #     Category: Cluster
 #     Input Type: single
@@ -43,6 +50,7 @@ IFS=$'\n\t'
 # - rs_kubernetes.sh
 # - kube_flannel.yml
 # - kube_dashboard.yml
+# - kube_dashboard_admin.yml
 # - kube_influxdb.yml
 # ...
 

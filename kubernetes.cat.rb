@@ -1,6 +1,6 @@
 name 'Kubernetes Cluster'
 rs_ca_ver 20161221
-short_description "![logo](https://dl.dropboxusercontent.com/u/2202802/nav_logo.png)
+short_description "![logo](https://s3.amazonaws.com/rs-pft/cat-logos/kubernetes.png)
 
 Creates a Kubernetes cluster"
 
@@ -68,32 +68,48 @@ This action will modify the minimum and maximum number of cluster nodes. Althoug
 
 ---"
 
+import "pft/mci"
+import "pft/mci/linux_mappings", as: "linux_mappings"
+import "pft/err_utilities", as: "debug"
+
 permission "read_credentials" do
   actions   "rs_cm.index", "rs_cm.show", "rs_cm.index_sensitive", "rs_cm.show_sensitive"
   resources "rs_cm.credentials"
+end
+
+mapping "map_image_name_root" do 
+ like $linux_mappings.map_image_name_root
 end
 
 mapping "map_cloud" do {
   "AWS" => {
     "cloud" => "EC2 us-east-1",
     "datacenter" => "us-east-1e",
-    "account_id" => "816783988377",
-    "instance_type" => "m3.large" },
-  "VMware" => {
-    "cloud" => "",
-    "datacenter" => "",
-    "account_id" => null,
-    "instance_type" => "" } }
-end
+    "subnet" => "@vpc_subnet",
+    "instance_type" => "t2.medium" 
+  },
+  "Google" => {
+    "cloud" => "Google",
+    "datacenter" => "us-central1-b",
+    "subnet" => null,
+    "instance_type" => "n1-standard-1" 
+  },
+  "AzureRM" => {   
+    "cloud" => "AzureRM East US",
+    "datacenter" => null,
+    "subnet" => "@vpc_subnet",
+    "instance_type" => "D1" 
+  }
+} end
 
-# parameter "master_count" do
-#   type "number"
-#   label "Master Count"
-#   category "Application"
-#   description "Number of cluster masters."
-#   allowed_values 1, 3, 5
-#   default 1
-# end
+parameter "cloud" do
+  type "string"
+  label "Cloud"
+  category "Application"
+  description "Target cloud for this cluster."
+  allowed_values "AWS", "Google", "AzureRM"
+  default "Google"
+end
 
 parameter "node_count_min" do
   type "number"
@@ -115,90 +131,107 @@ parameter "node_count_max" do
   default 6
 end
 
-parameter "cloud" do
-  type "string"
-  label "Cloud"
-  category "Application"
-  description "Target cloud for this cluster."
-  allowed_values "AWS"#, "VMware"
-  default "AWS"
-end
-
 parameter "admin_ip" do
   type "string"
   label "Admin IP"
   category "Application"
-  description "Allowed source IP for cluster administration. This IP address will have full access to the cluster."
+  description "Allowed source IP for cluster administration. This IP address will have access to the cluster dashboard."
   allowed_pattern "^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
   constraint_description "Please enter a single IP address. Additional IPs can be added after launch."
 end
 
-resource 'cluster_sg', type: 'security_group' do
-  name join(['cluster_sg_', last(split(@@deployment.href, '/'))])
-  cloud map($map_cloud, $cloud, "cloud")
+condition "needsSecurityGroup" do
+  logic_or(logic_or(equals?($cloud, "AWS"), equals?($cloud, "Google")), equals?($cloud, "AzureRM"))
 end
 
+condition "needsRouteManagement" do
+  equals?($cloud, "AWS")
+end
+
+### Network Definitions ###
+resource "vpc_network", type: "network" do
+  name join(["cat_vpc_", last(split(@@deployment.href,"/"))])
+  cloud map($map_cloud, $cloud, "cloud")
+  cidr_block "10.1.0.0/16"
+end
+
+resource "vpc_subnet", type: "subnet" do
+  name join(["cat_subnet_", last(split(@@deployment.href,"/"))])
+  cloud map($map_cloud, $cloud, "cloud")
+  datacenter map($map_cloud, $cloud, "datacenter")
+  network_href @vpc_network
+  cidr_block "10.1.1.0/24"
+end
+
+resource "vpc_igw", type: "network_gateway" do
+  name join(["cat_igw_", last(split(@@deployment.href,"/"))])
+  cloud map($map_cloud, $cloud, "cloud")
+  type "internet"
+  network_href @vpc_network
+end
+
+resource "vpc_route_table", type: "route_table" do
+  name join(["cat_route_table_", last(split(@@deployment.href,"/"))])
+  cloud map($map_cloud, $cloud, "cloud")
+  network_href @vpc_network
+end
+
+# Outbound traffic
+resource "vpc_route", type: "route" do
+  name join(["cat_internet_route_", last(split(@@deployment.href,"/"))])
+  destination_cidr_block "0.0.0.0/0" 
+  next_hop_network_gateway @vpc_igw
+  route_table @vpc_route_table
+end
+
+# Used to allow cluster master and nodes to talk to each other
+resource 'cluster_sg', type: 'security_group' do
+  name join(['ClusterSG-', last(split(@@deployment.href, '/'))])
+  description "Cluster security group."
+  cloud map($map_cloud, $cloud, "cloud")
+  network_href @vpc_network
+end
+
+# Allow the master and nodes to talk to each other
 resource 'cluster_sg_rule_int_tcp', type: 'security_group_rule' do
+  name "ClusterSG TCP Rule"
+  description "TCP rule for Cluster SG"
+  source_type "cidr_ips"
+  security_group @cluster_sg
   protocol 'tcp'
   direction 'ingress'
-  source_type 'group'
-  security_group @cluster_sg
-  group_owner map($map_cloud, $cloud, "account_id")
+  cidr_ips "10.1.0.0/16"
   protocol_details do {
-    'start_port' => '0',
+    'start_port' => '1',
     'end_port' => '65535'
   } end
 end
 
 resource 'cluster_sg_rule_int_udp', type: 'security_group_rule' do
+  name "ClusterSG UDP Rule"
+  description "UDP rule for Cluster SG"
+  source_type "cidr_ips"
+  security_group @cluster_sg
   protocol 'udp'
   direction 'ingress'
-  source_type 'group'
-  security_group @cluster_sg
-  group_owner map($map_cloud, $cloud, "account_id")
+  cidr_ips "10.1.0.0/16"
   protocol_details do {
-    'start_port' => '0',
+    'start_port' => '1',
     'end_port' => '65535'
   } end
 end
 
-resource 'cluster_sg_rule_admin', type: 'security_group_rule' do
-  protocol 'tcp'
-  direction 'ingress'
-  source_type 'cidr_ips'
-  security_group @cluster_sg
-  cidr_ips join([$admin_ip, '/32'])
-  protocol_details do {
-    'start_port' => '0',
-    'end_port' => '65535'
-  } end
-end
-
-resource 'cluster_master', type: 'server_array' do
+resource 'cluster_master', type: 'server' do
   name 'cluster-master'
   cloud map($map_cloud, $cloud, "cloud")
   datacenter map($map_cloud, $cloud, "datacenter")
+  network_href @vpc_network
+  subnet_hrefs map($map_cloud, $cloud, "subnet")
+  security_group_hrefs @cluster_sg
   instance_type map($map_cloud, $cloud, "instance_type")
   server_template find('Kubernetes', revision: 0)
   inputs do {
     'RS_CLUSTER_ROLE' => 'text:master'
-  } end
-  state 'disabled'
-  array_type 'alert'
-  elasticity_params do {
-    'bounds' => {
-      'min_count'            => 1,
-      'max_count'            => 1
-    },
-    'pacing' => {
-      'resize_calm_time'     => 30,
-      'resize_down_by'       => 1,
-      'resize_up_by'         => 1
-    },
-    'alert_specific_params' => {
-      'decision_threshold'   => 0,
-      'voters_tag_predicate' => 'cluster_master'
-    }
   } end
 end
 
@@ -206,6 +239,9 @@ resource 'cluster_node', type: 'server_array' do
   name 'cluster-node'
   cloud map($map_cloud, $cloud, "cloud")
   datacenter map($map_cloud, $cloud, "datacenter")
+  network_href @vpc_network
+  subnet_hrefs map($map_cloud, $cloud, "subnet")
+  security_group_hrefs @cluster_sg
   instance_type map($map_cloud, $cloud, "instance_type")
   server_template find('Kubernetes', revision: 0)
   inputs do {
@@ -219,7 +255,7 @@ resource 'cluster_node', type: 'server_array' do
       'max_count'            => $node_count_max
     },
     'pacing' => {
-      'resize_calm_time'     => 30,
+      'resize_calm_time'     => 5,
       'resize_down_by'       => 1,
       'resize_up_by'         => 3
     },
@@ -231,7 +267,7 @@ resource 'cluster_node', type: 'server_array' do
 end
 
 output "ssh_url" do
-  label "SSH to master server"
+  label "Master Node IP"
   category "Kubernetes"
 end
 
@@ -240,8 +276,8 @@ output "dashboard_url" do
   category "Kubernetes"
 end
 
-output "admin_ips" do
-  label "Authorized admin IPs"
+output "output_admin_ips" do
+  label "IPs with Access to Dashboard"
   category "Kubernetes"
 end
 
@@ -249,9 +285,9 @@ operation 'launch' do
   description 'Launch the application'
   definition 'launch'
   output_mappings do {
-    $ssh_url => join(["ssh://rightscale@", $master_ip]),
-    $admin_ips => $new_admin_ips,
-    $dashboard_url => join(["http://", $master_ip, ":", $dashboard_port])
+    $ssh_url => $master_ip,
+    $dashboard_url => join(["https://", $master_ip, ":", $dashboard_port]),
+    $output_admin_ips => $admin_ips
   } end
 end
 
@@ -260,23 +296,33 @@ operation 'terminate' do
   definition 'terminate'
 end
 
-operation 'op_add_admin_ip' do
-  label 'Add Admin IP'
-  description 'Authorize an additional admin IP for full access to the cluster'
-  definition 'add_admin_ip'
-  output_mappings do {
-    $admin_ips => $new_admin_ips
-  } end
-end
-
 operation 'op_update_autoscaling_range' do
   label 'Update Autoscaling Range'
   description 'Modify the minimum and maximum number of cluster nodes'
   definition 'resize_cluster'
 end
 
-define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $admin_ip, $cloud) return @cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admin, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, $master_ip, $new_admin_ips, $dashboard_port do
+operation 'op_add_admin_ip' do
+  label 'Add Admin IP'
+  description 'Authorize an additional admin IP for full access to the cluster'
+  definition 'add_admin_ip'
+  output_mappings do {
+    $output_admin_ips => $admin_ips
+  } end
+end
 
+define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, @vpc_network, @vpc_subnet, @vpc_igw, @vpc_route_table, @vpc_route, $cloud, $admin_ip, $map_cloud, $map_image_name_root, $needsSecurityGroup, $needsRouteManagement) return @cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_int_tcp, @cluster_sg_rule_int_udp, @vpc_network, @vpc_subnet, @vpc_igw, @vpc_route_table, @vpc_route, $master_ip, $dashboard_port, $admin_ips do
+
+  # Make sure the MCI is pointing to the latest image for the cloud.
+  # This adds about a minute to the launch but is worth it to avoid a failure due to the cloud provider
+  # deprecating the image we use.
+  $cloud_name = map( $map_cloud, $cloud, "cloud" )
+  $mci_name = "PFT Ubuntu 16.04"
+  call mci.find_mci($mci_name) retrieve @mci
+  @cloud = find("clouds", $cloud_name)
+  call mci.find_image_href(@cloud, $map_image_name_root, $mci_name, $cloud) retrieve $image_href
+  call mci.mci_upsert_cloud_image(@mci, @cloud.href, $image_href)
+  
   call sys_get_execution_id() retrieve $execution_id
 
   @@deployment.multi_update_inputs(inputs: {
@@ -284,25 +330,50 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
     'RS_CLUSTER_CLOUD':'text:' + $cloud,
     'RS_CLUSTER_TYPE':'text:kubernetes'
   })
+  
+  provision(@vpc_network)
+  
+  # Google autocreates the subnet and the server needs to be associated with it.
+  if ($cloud == "Google")
+    # Wait for the subnet
+    sleep_until(@vpc_network.cloud().subnets(filter: ["network_href=="+@vpc_network.href]).href)
+  
+    # Make sure the servers are launched on the created subnet
+    $subnet_href = @vpc_network.cloud().subnets(filter: ["network_href=="+@vpc_network.href]).href
+    
+    $server = to_object(@cluster_master)
+    $server["fields"]["subnet_hrefs"] = [$subnet_href]
+    @cluster_master = $server
+    
+    $server = to_object(@cluster_node)
+    $server["fields"]["subnet_hrefs"] = [$subnet_href]
+    @cluster_node = $server
+  else
+    provision(@vpc_subnet)
+  end
 
+  if $needsRouteManagement
+    provision(@vpc_igw)
+    provision(@vpc_route_table)    
+    provision(@vpc_route)
+      
+    # configure the network to use the route table
+    @vpc_network.update(network: {route_table_href: to_s(@vpc_route_table.href)})
+    
+    # Update the server definitions to use the subnet's datacenter
+    call set_server_dc(@cluster_master, @vpc_subnet) retrieve @cluster_master
+    call set_server_dc(@cluster_node, @vpc_subnet) retrieve @cluster_node
+  end
+  
+  provision(@cluster_sg_rule_int_tcp)
+  provision(@cluster_sg_rule_int_udp)
+      
   if $cloud == "AWS"
-    provision(@cluster_sg)
-
-    call security_group_name($cloud, @cluster_sg) retrieve $security_group_name
-    call update_field(@cluster_sg_rule_int_tcp, "group_name", $security_group_name) retrieve @cluster_sg_rule_int_tcp
-    call update_field(@cluster_sg_rule_int_udp, "group_name", $security_group_name) retrieve @cluster_sg_rule_int_udp
-
-    provision(@cluster_sg_rule_int_tcp)
-    provision(@cluster_sg_rule_int_udp)
-    provision(@cluster_sg_rule_admin)
-
-    call update_field(@cluster_master, "security_group_hrefs", [@cluster_sg]) retrieve @cluster_master
-    call update_field(@cluster_node, "security_group_hrefs", [@cluster_sg]) retrieve @cluster_node
-
     call update_field(@cluster_master, "cloud_specific_attributes", {"root_volume_size" => 100, "root_volume_type_uid" => "gp2"}) retrieve @cluster_master
     call update_field(@cluster_node, "cloud_specific_attributes", {"root_volume_size" => 100, "root_volume_type_uid" => "gp2"}) retrieve @cluster_node
   end
 
+  call debug.log("cluster_master hash before provision", to_s(to_object(@cluster_master)))
   provision(@cluster_master)
   
   @@deployment.multi_update_inputs(inputs: {
@@ -311,36 +382,61 @@ define launch(@cluster_master, @cluster_node, @cluster_sg, @cluster_sg_rule_admi
   
   provision(@cluster_node)
 
-  $new_admin_ips = $admin_ip
-  $dashboard_port = tag_value(first(@cluster_master.current_instances()), "rs_cluster:dashboard_port")
+  $dashboard_port = tag_value(first(@cluster_master.current_instance()), "rs_cluster:dashboard_port")
+    
+  call add_admin_ip_sgrule(@cluster_sg, $admin_ip, $dashboard_port)
+  
+  # Store the admin ip and get the current list of admin ips
+  call store_admin_ip($admin_ip) retrieve $admin_ips
 
-  if $cloud == "AWS"
-    $master_ip = @cluster_master.current_instances().public_ip_addresses[0]
+  if $cloud == "VMware" # Currently not a supported cloud 
+    $master_ip = @cluster_master.current_instance().private_ip_addresses[0]
   else
-    $master_ip = @cluster_master.current_instances().private_ip_addresses[0]
+    $master_ip = @cluster_master.current_instance().public_ip_addresses[0]
   end
 end
 
-define terminate(@cluster_master, @cluster_node) return @cluster_master, @cluster_node do
+define terminate(@cluster_master, @cluster_node, @vpc_network, @vpc_route_table, $needsRouteManagement) return @cluster_master, @cluster_node do
   # remove servers first to ensure auto_terminate can cleanly remove security groups
   concurrent do
     delete(@cluster_master)
     delete(@cluster_node)
   end
+  
+  if $needsRouteManagement
+    # switch back in the default route table so that auto-terminate doesn't hit a dependency issue when cleaning up.
+    # Another approach would have been to not create and associate a new route table but instead find the default route table
+    # and add the outbound 0.0.0.0/0 route to it.
+    @other_route_table = @vpc_route_table #  initializing the variable
+    # Find the route tables associated with our network. 
+    # There should be two: the one we created above and the default one that is created for new networks.
+    @route_tables=rs_cm.route_tables.get(filter: [join(["network_href==",to_s(@vpc_network.href)])])
+    foreach @route_table in @route_tables do
+      if @route_table.href != @vpc_route_table.href
+        # We found the default route table
+        @other_route_table = @route_table
+      end
+    end
+    # Update the network to use the default route table 
+    @vpc_network.update(network: {route_table_href: to_s(@other_route_table.href)})
+  end
+  
+  # Delete the credential that was created by the kubernetes set up rightscript.
+  call sys_get_execution_id() retrieve $execution_id
+  $cred_name = 'KUBE_' + $execution_id + '_CLUSTER_TOKEN'
+  @cred = find("credentials", $cred_name)
+  delete(@cred)
+  
 end
 
-define resize_cluster(@cluster_node, $node_count_min, $node_count_max) return @cluster_node, $node_count_min, $node_count_max do
-  @cluster_node.update(server_array: {
-    "elasticity_params": {
-      "bounds": {
-        "min_count": $node_count_min,
-        "max_count": $node_count_max
-      }
-    }
-  })
+define add_admin_ip(@cluster_master, @cluster_sg, $admin_ip) return $admin_ips do
+  $dashboard_port = tag_value(first(@cluster_master.current_instance()), "rs_cluster:dashboard_port")
+  call add_admin_ip_sgrule(@cluster_sg, $admin_ip, $dashboard_port)
+  # Store the admin ip and get the current list of admin ips
+  call store_admin_ip($admin_ip) retrieve $admin_ips
 end
 
-define add_admin_ip(@cluster_sg, $admin_ip) return $new_admin_ips do
+define add_admin_ip_sgrule(@cluster_sg, $admin_ip, $dashboard_port) do
   @new_rule = {
     "namespace": "rs_cm",
     "type": "security_group_rule",
@@ -351,25 +447,43 @@ define add_admin_ip(@cluster_sg, $admin_ip) return $new_admin_ips do
       "security_group_href": @cluster_sg,
       "cidr_ips": join([$admin_ip, '/32']),
       "protocol_details": {
-        "start_port": "0",
-        "end_port": "65535"
+        "start_port": $dashboard_port, 
+        "end_port": $dashboard_port
       }
     }
   }
-
   provision(@new_rule)
+end
 
-  $sg_cidr_ips = @cluster_sg.security_group_rules().cidr_ips[]
-
-  $sg_ips = map $sg_cidr_ip in $sg_cidr_ips return $sg_ip do
-    if $sg_cidr_ip
-      $sg_ip = first(split($sg_cidr_ip, "/"))
-    else
-      $sg_ip = null
-    end
+define store_admin_ip($admin_ip) return $admin_ips do
+  $tag_prefix = "kube:admin_ips"
+  $admin_ips = tag_value(@@deployment, $tag_prefix)
+  if $admin_ips
+    $admin_ips = $admin_ips + "," + $admin_ip
+  else
+    $admin_ips = $admin_ip
   end
+  $tags=[$tag_prefix + "=" + $admin_ips]
+  rs_cm.tags.multi_add(resource_hrefs: [@@deployment.href], tags: $tags)
+end
 
-  $new_admin_ips = join($sg_ips, ", ")
+define set_server_dc(@server, @subnet) return @server do  
+  @dc = @subnet.datacenter()
+  $dc_href = @dc.href
+  $server = to_object(@server)
+  $server["fields"]["datacenter_href"] = $dc_href
+  @server = $server
+end
+  
+define resize_cluster(@cluster_node, $node_count_min, $node_count_max) return @cluster_node, $node_count_min, $node_count_max do
+  @cluster_node.update(server_array: {
+    "elasticity_params": {
+      "bounds": {
+        "min_count": $node_count_min,
+        "max_count": $node_count_max
+      }
+    }
+  })
 end
 
 define security_group_name($cloud, @group) return $name do

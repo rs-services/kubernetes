@@ -13,20 +13,43 @@ EOF
   sudo apt-get install -y docker.io
   sudo apt-get install -y kubelet kubeadm kubectl kubernetes-cni
 
-  # Initialize the master
-  token=$(sudo kubeadm init --pod-network-cidr 10.244.0.0/16 | tail -n 1)
+  # Initialize the master and grab the join command to be used by the cluster nodes
+  token=$(sudo kubeadm init --pod-network-cidr 10.244.0.0/16 | grep -i "kubeadm join")
+  
+  RS_API_ENDPOINT=$(echo $RS_SERVER | cut -d '\' -f3)
 
   # Save the token as a RightScale credential
-  rsc --refreshToken="$RS_REFRESH_TOKEN" --host=us-4.rightscale.com cm15 create credentials \
+  rsc --refreshToken="$RS_REFRESH_TOKEN" --host="$RS_API_ENDPOINT" cm15 create credentials \
     credential[name]="KUBE_${RS_CLUSTER_NAME}_CLUSTER_TOKEN" \
     credential[value]="$token"
+    
+  # When you run the kubeadm init command along with the join command that is grabbed above,
+  # it provides these instructions for steps that need to be taken before subsequent commands will work:
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
   # Initialize the overlay network
+  echo ">>> flannel set up"
   sudo kubectl apply -f "$RS_ATTACH_DIR/kube_flannel.yml"
+    
+  echo ">>> dashboard set up"
   sudo kubectl apply -f "$RS_ATTACH_DIR/kube_dashboard.yml"
+  
+  echo ">>> influxdb set up"
   sudo kubectl apply -f "$RS_ATTACH_DIR/kube_influxdb.yml"
+  
+  echo ">>> Exposing dashboard"
+  sudo kubectl -n kube-system expose deployment kubernetes-dashboard \
+        --name kubernetes-dashboard-nodeport --type=NodePort
+        
+  ### This is is NOT for PRODUCTION
+  ### This gives full access to the Kubernetes cluster.
+  echo ">>> Creating open access to dashboard with full ADMIN level permissions."
+  kubectl create -f "$RS_ATTACH_DIR/kube_dashboard_admin.yml"
 
-  dashboard_port=$(sudo kubectl get svc -n kube-system | grep '^kubernetes-dashboard ' | awk '{print $4}' | cut -f1 -d/ | cut -f2 -d:)
+  echo ">>> get dashboard port"
+  dashboard_port=$(sudo kubectl -n kube-system get svc/kubernetes-dashboard-nodeport | grep 'kubernetes-dashboard' | sed 's/  */%/g' | cut -d "%" -f5 | cut -d":" -f2 | cut -d"/" -f1)
 
   rs_cluster_tag "rs_cluster:dashboard_port=$dashboard_port"
 }
@@ -44,5 +67,6 @@ EOF
   sudo apt-get install -y kubelet kubeadm kubectl kubernetes-cni
 
   # Join cluster
+  echo ">>> Join cluster"
   eval "sudo $KUBE_CLUSTER_JOIN_CMD"
 }
